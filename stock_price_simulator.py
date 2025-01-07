@@ -1,5 +1,7 @@
 import random
 import time
+from flask import Flask, jsonify
+import threading
 
 class StockPriceSimulator:
     def __init__(self, initial_price: float, shares_outstanding: int):
@@ -81,26 +83,38 @@ class StockPriceSimulator:
         self.price_history.append((time.time(), self.current_price))
         print(f"Sold {number_of_shares} shares for ${total_revenue:.2f}. Total shares outstanding: {self.shares_outstanding}")
 
-    def simulate(self, duration: int):
-        """Runs the simulation for the specified duration in seconds."""
-        start_time = time.time()
-
-        while time.time() - start_time < duration:
+    def simulate(self):
+        """Runs the simulation indefinitely."""
+        while True:
             self.update_price()
-            velocity = self.calculate_velocity()
-            market_cap = self.calculate_market_cap()
-            candle = self.calculate_candle()
+            time.sleep(1)
 
-            print(f"Current Price: ${self.current_price:.2f}")
-            print(f"Velocity (change/sec): {velocity:.4f}")
-            print(f"Market Cap: ${market_cap:.2f}")
+# Flask app to expose the simulator's data
+app = Flask(__name__)
+simulator = StockPriceSimulator(initial_price=100.0, shares_outstanding=1_000_000)
 
-            if candle:
-                print(f"Candle (1 min): Open: ${candle['open']:.2f}, High: ${candle['high']:.2f}, Low: ${candle['low']:.2f}, Close: ${candle['close']:.2f}\n")
+def run_simulator():
+    simulator.simulate()
 
-            time.sleep(1)  # Wait 1 second before the next update
+@app.route("/current_price", methods=["GET"])
+def get_current_price():
+    return jsonify({"current_price": simulator.current_price})
 
-# Usage example
+@app.route("/velocity", methods=["GET"])
+def get_velocity():
+    velocity = simulator.calculate_velocity()
+    return jsonify({"velocity": velocity})
+
+@app.route("/market_cap", methods=["GET"])
+def get_market_cap():
+    market_cap = simulator.calculate_market_cap()
+    return jsonify({"market_cap": market_cap})
+
+@app.route("/candle", methods=["GET"])
+def get_candle():
+    candle = simulator.calculate_candle()
+    return jsonify(candle if candle else {"error": "No candle data available"})
+
 if __name__ == "__main__":
-    simulator = StockPriceSimulator(initial_price=100.0, shares_outstanding=1_000_000)
-    simulator.simulate(duration=60)  # Simulate for 60 seconds
+    threading.Thread(target=run_simulator, daemon=True).start()
+    app.run(host="0.0.0.0", port=5000)
